@@ -25,7 +25,18 @@ public class LexerTests {
                 Arguments.of("Alphanumeric", "thelegend27", true),
                 Arguments.of("Leading Hyphen", "-five", false),
                 Arguments.of("Leading Digit", "1fish2fish3fishbluefish", false),
-                Arguments.of("single character", "x", true)
+                Arguments.of("single character", "x", true),
+                Arguments.of("Alphabetic", "abc", true),
+                Arguments.of("Alphanumeric", "abc123", true),
+                Arguments.of("Hyphens", "a-b-c", true),
+                Arguments.of("Only Underscores", "___", true),
+                Arguments.of("Leading Underscore", "_abc", true),
+                Arguments.of("Capitals", "ABC", true),
+                Arguments.of("Short Identifier", "a", true),
+                Arguments.of("Long Identifier", "abcdefghijklmnopqrstuvwxyz012346789_-", true),
+                Arguments.of("And", "AND", true),
+                Arguments.of("Or", "OR", true)
+
         );
     }
 
@@ -43,7 +54,8 @@ public class LexerTests {
                 Arguments.of("Leading Zero", "01", false),
                 Arguments.of("decimal", "123.45", false),
                 Arguments.of("comma separated", "1,234", false),
-                Arguments.of("leading zeros", "001", false)
+                Arguments.of("leading zeros", "001", false),
+                Arguments.of("Negative", "-1", true)
         );
     }
 
@@ -78,7 +90,17 @@ public class LexerTests {
                 Arguments.of("Empty", "\'\'", false),
                 Arguments.of("Multiple", "\'abc\'", false),
                 Arguments.of("unterminated", "\'", false),
-                Arguments.of("newline", "'␊'", true)
+                Arguments.of("newline", "'␊'", true),
+                Arguments.of("Empty", "''", false),
+                Arguments.of("Multiple", "'abc'", false),
+                Arguments.of("Unterminated Empty Quote", "'", false),
+                Arguments.of("Alphabetic", "'c'", true),
+                Arguments.of("Digit", "'1'", true),
+                Arguments.of("Unicode", "'ρ'", true),
+                Arguments.of("Space", "' '", true),
+                Arguments.of("Single Quote Escape", "'\\''", true),
+                Arguments.of("Backslash Escape", "'\\\\'", true)
+
         );
     }
 
@@ -96,7 +118,23 @@ public class LexerTests {
                 Arguments.of("Unterminated", "\"unterminated", false),
                 Arguments.of("Invalid Escape", "\"invalid\\escape\"", false),
                 Arguments.of("symbols", "\"!@#$%^&*()\"", true),
-                Arguments.of("newline unterminated", "\"unterminated\n\"", false)
+                Arguments.of("newline unterminated", "\"unterminated\n\"", false),
+                Arguments.of("Empty", "\"\"", true),
+                Arguments.of("Single Character", "\"c\"", true),
+                Arguments.of("Alphabetic", "\"abc\"", true),
+                Arguments.of("Numeric", "\"123\"", true),
+                Arguments.of("Symbols", "\"!@#$%^&*\"", true),
+                Arguments.of("Unicode", "\"ρ★⚡\"", true),
+                Arguments.of("Whitespace", "\" ␈␉\"", true), // space, backspace, tab
+                Arguments.of("Escape", "\"Hello, \\nWorld!\"", true),
+                Arguments.of("Alphabetic Escapes", "\"a\\bcdefghijklm\\nopq\\rs\\tuvwxyz\"", true),
+                Arguments.of("Special Escapes", "\"sq\\'dq\\\"bs\\\\\"", true),
+                Arguments.of("Invalid Escape", "\"abc\\0123\"", false),     // octal-style, not supported
+                Arguments.of("Unicode Escapes", "\"a\\u0000b\\u12ABc\"", false), // Java-style  escapes not supported
+                Arguments.of("Unterminated", "\"unterminated", false),
+                Arguments.of("Unterminated Newline", "\"unterminated\n\"", false),
+                Arguments.of("Unterminated Empty Quote", "\"", false)
+
         );
     }
 
@@ -114,7 +152,18 @@ public class LexerTests {
                 Arguments.of("Space", " ", false),
                 Arguments.of("Tab", "\t", false),
                 Arguments.of("symbol", "$", false),
-                Arguments.of("plus sign", "+", true)
+                Arguments.of("plus sign", "+", true),
+                Arguments.of("Remainder", "%", true),
+                Arguments.of("Unicode", "ρ", true),
+                Arguments.of("Greater Than", ">", true),
+                Arguments.of("Not Equals", "!=", true),
+                Arguments.of("Less Than Equals", "<=", true),
+                Arguments.of("Plus", "+", true),
+                Arguments.of("Hyphen", "-", true),
+                Arguments.of("Space", " ", true),
+                Arguments.of("Tab", "\t", true),
+                Arguments.of("Form Feed", "\f", true)
+
         );
     }
 
@@ -139,11 +188,152 @@ public class LexerTests {
                         new Token(Token.Type.STRING, "\"Hello, World!\"", 6),
                         new Token(Token.Type.OPERATOR, ")", 21),
                         new Token(Token.Type.OPERATOR, ";", 22)
-                )),
-                Arguments.of("Example 3", "one␈two", Arrays.asList(
-                        new Token(Token.Type.IDENTIFIER, "one", 0),
-                        new Token(Token.Type.IDENTIFIER, "two", 0)
                 ))
+                ,
+                // 1) Empty input → no tokens
+                Arguments.of("Empty", "", Arrays.asList()),
+
+                // 2) All Types:  abc 123 456.789 'c' "string" %
+                Arguments.of("All Types", "abc 123 456.789 'c' \"string\" %",
+                        Arrays.asList(
+                                new Token(Token.Type.IDENTIFIER, "abc", 0),
+                                new Token(Token.Type.INTEGER, "123", 4),
+                                new Token(Token.Type.DECIMAL, "456.789", 8),
+                                new Token(Token.Type.CHARACTER, "'c'", 16),
+                                new Token(Token.Type.STRING, "\"string\"", 20),
+                                new Token(Token.Type.OPERATOR, "%", 29)
+                        )
+                ),
+
+                // 3) Leading Digit:  1fish2fish3fishbluefish
+                //    INTEGER("1") then IDENTIFIER("fish2fish3fishbluefish")
+                Arguments.of("Leading Digit", "1fish2fish3fishbluefish",
+                        Arrays.asList(
+                                new Token(Token.Type.INTEGER, "1", 0),
+                                new Token(Token.Type.IDENTIFIER, "fish2fish3fishbluefish", 1)
+                        )
+                ),
+
+                // 4) Leading Decimal:  .5  → "." operator then INTEGER("5")
+                Arguments.of("Leading Decimal", ".5",
+                        Arrays.asList(
+                                new Token(Token.Type.OPERATOR, ".", 0),
+                                new Token(Token.Type.INTEGER, "5", 1)
+                        )
+                ),
+
+                // 5) Double Decimal:  1..0  → INTEGER("1"), ".", ".", INTEGER("0")
+                Arguments.of("Double Decimal", "1..0",
+                        Arrays.asList(
+                                new Token(Token.Type.INTEGER, "1", 0),
+                                new Token(Token.Type.OPERATOR, ".", 1),
+                                new Token(Token.Type.OPERATOR, ".", 2),
+                                new Token(Token.Type.INTEGER, "0", 3)
+                        )
+                ),
+
+                // 6) Multiple Decimals:  1.2.3  → DECIMAL("1.2"), ".", INTEGER("3")
+                Arguments.of("Multiple Decimals", "1.2.3",
+                        Arrays.asList(
+                                new Token(Token.Type.DECIMAL, "1.2", 0),
+                                new Token(Token.Type.OPERATOR, ".", 3),
+                                new Token(Token.Type.INTEGER, "3", 4)
+                        )
+                ),
+
+                // 7) Number Method:  1.toString()
+                Arguments.of("Number Method", "1.toString()",
+                        Arrays.asList(
+                                new Token(Token.Type.INTEGER, "1", 0),
+                                new Token(Token.Type.OPERATOR, ".", 1),
+                                new Token(Token.Type.IDENTIFIER, "toString", 2),
+                                new Token(Token.Type.OPERATOR, "(", 10),
+                                new Token(Token.Type.OPERATOR, ")", 11)
+                        )
+                ),
+
+                // 8) Not Subtraction:  15-10  → INTEGER("15"), "-", INTEGER("10")
+                Arguments.of("Not Subtraction", "15-10",
+                        Arrays.asList(
+                                new Token(Token.Type.INTEGER, "15", 0),
+                                new Token(Token.Type.OPERATOR, "-", 2),
+                                new Token(Token.Type.INTEGER, "10", 3)
+                        )
+                ),
+
+                // 9) Inner String:  abc"str"123
+                Arguments.of("Inner String", "abc\"str\"123",
+                        Arrays.asList(
+                                new Token(Token.Type.IDENTIFIER, "abc", 0),
+                                new Token(Token.Type.STRING, "\"str\"", 3),
+                                new Token(Token.Type.INTEGER, "123", 8)
+                        )
+                ),
+
+                // 10) Weird Quotes:  '"'string"'"
+                //     CHARACTER('"' ), IDENTIFIER(string), STRING("\"'\"")
+                Arguments.of("Weird Quotes", "'\"'string\"'\"",
+                        Arrays.asList(
+                                new Token(Token.Type.CHARACTER, "'\"'", 0),
+                                new Token(Token.Type.IDENTIFIER, "string", 3),
+                                new Token(Token.Type.STRING, "\"'\"", 9)
+                        )
+                ),
+
+                // 11) All The Quotes:  """"""""""
+                //     Five empty strings back-to-back (10 quotes)
+                Arguments.of("All The Quotes", "\"\"\"\"\"\"\"\"\"\"",
+                        Arrays.asList(
+                                new Token(Token.Type.STRING, "\"\"", 0),
+                                new Token(Token.Type.STRING, "\"\"", 2),
+                                new Token(Token.Type.STRING, "\"\"", 4),
+                                new Token(Token.Type.STRING, "\"\"", 6),
+                                new Token(Token.Type.STRING, "\"\"", 8)
+                        )
+                ),
+
+                // 12) Equals Combinations:  !====  → "!=" "==" "="
+                Arguments.of("Equals Combinations", "!====",
+                        Arrays.asList(
+                                new Token(Token.Type.OPERATOR, "!=", 0),
+                                new Token(Token.Type.OPERATOR, "==", 2),
+                                new Token(Token.Type.OPERATOR, "=", 4)
+                        )
+                ),
+
+                // 13) Spaceship Operator:  <=>  → "<=" then ">"
+                Arguments.of("Spaceship Operator", "<=>",
+                        Arrays.asList(
+                                new Token(Token.Type.OPERATOR, "<=", 0),
+                                new Token(Token.Type.OPERATOR, ">", 2)
+                        )
+                ),
+
+                // 14) Right Bitshift:  >>  → ">" then ">"
+                Arguments.of("Right Bitshift", ">>",
+                        Arrays.asList(
+                                new Token(Token.Type.OPERATOR, ">", 0),
+                                new Token(Token.Type.OPERATOR, ">", 1)
+                        )
+                ),
+
+                // 15) Null Character:  null\0
+                // In Java, use "\0" to embed NUL. It’s not whitespace per your lexer,
+                // so it becomes a single-character OPERATOR after the identifier.
+                Arguments.of("Null Character", "null\0",
+                        Arrays.asList(
+                                new Token(Token.Type.IDENTIFIER, "null", 0),
+                                new Token(Token.Type.OPERATOR, "\0", 4)
+                        )
+                ),
+
+                // 16) Operator Integer:  +0  → "+" then INTEGER("0")
+                Arguments.of("Operator Integer", "+0",
+                        Arrays.asList(
+                                new Token(Token.Type.OPERATOR, "+", 0),
+                                new Token(Token.Type.INTEGER, "0", 1)
+                        )
+                )
         );
     }
 

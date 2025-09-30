@@ -19,9 +19,6 @@ import java.util.regex.Pattern;
  */
 public final class Lexer {
 
-//            OPERATOR = Pattern.compile("([<>!=]=?|.)"),
-//            WHITESPACE = Pattern.compile("[ \\b\\n\\r\\t]+");
-
     private final CharStream chars;
 
     public Lexer(String input) {
@@ -39,7 +36,7 @@ public final class Lexer {
         while(chars.index != chars.input.length())
         {
             // check for whitespace
-            while(peek("[ \\n\\r\\t\b]"))
+            while(peek("[ \\n\\r\\t]"))
                 match("[ \\n\\r\\t]");
 
             // if at EOF, break
