@@ -34,10 +34,19 @@ public final class Parser {
      * Parses the {@code source} rule.
      */
     public Ast.Source parseSource() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        List<Ast.Field> fields = new ArrayList<>();
+        List<Ast.Method> methods = new ArrayList<>();
 
-        // examines the list of tokens (master of ceremonies)
+        while (peek("LET")) {
+            fields.add(parseField());
+        }
+        while (peek("DEF")) {
+            methods.add(parseMethod());
+        }
+        if(peek("LET"))
+            throw new ParseException("Field follows Method", tokens.get(0).getIndex());
 
+        return new Ast.Source(fields, methods);
     }
 
     /**
@@ -45,7 +54,28 @@ public final class Parser {
      * next tokens start a field, aka {@code LET}.
      */
     public Ast.Field parseField() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+
+        match("LET");
+
+        boolean constant = false;
+        if(match("CONST"))
+            constant = true;
+
+        String name;
+        if(match(Token.Type.IDENTIFIER))
+            name = checkHas().getLiteral();
+        else
+            throw new ParseException("Expected identifier", tokens.get(0).getIndex());
+
+        Optional<Ast.Expression> expr = Optional.empty();
+        if (match("=")) {
+            expr = Optional.of(parseExpression());
+        }
+
+        if(!match(";"))
+            throw new ParseException("Missing ';'", tokens.get(0).getIndex());
+
+        return new Ast.Field(name, constant, expr);
     }
 
     /**
@@ -53,7 +83,47 @@ public final class Parser {
      * next tokens start a method, aka {@code DEF}.
      */
     public Ast.Method parseMethod() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        match("DEF");
+
+        // get method name
+        String name;
+        if(match(Token.Type.IDENTIFIER))
+            name = checkHas().getLiteral();
+        else
+            throw new ParseException("Expected identifier", tokens.get(0).getIndex());
+
+        // check for (
+        if(!match("("))
+            throw new ParseException("Expected '('", tokens.get(0).getIndex());
+
+        // get parameters
+        List<String> parameters = new ArrayList<>();
+        if(peek(Token.Type.IDENTIFIER))
+        {
+            do{
+                parameters.add(checkHas().getLiteral());
+            }while(peek(","));
+        }
+
+        // check for )
+        if(!match(")"))
+            throw new ParseException("Expected ')'", tokens.get(0).getIndex());
+
+        if(!match("DO"))
+            throw new ParseException("Expected 'DO'", tokens.get(0).getIndex());
+
+        // get statement(s)
+        List<Ast.Statement> statements = new ArrayList<Ast.Statement>();
+        while (!peek("END") && tokens.has(0))
+        {
+            statements.add(parseStatement());
+        }
+
+        // check for END
+        if(!match("END"))
+            throw new ParseException("Missing 'END'", tokens.get(-1).getIndex());
+
+        return new Ast.Method(name, parameters, statements);
     }
 
     /**
@@ -63,23 +133,46 @@ public final class Parser {
      */
     public Ast.Statement parseStatement() throws ParseException {
 
-        Ast.Expression expr = parseExpression();
-
-        // if there is an equal sign, it's an assignment
-        if(match("="))
+        if(peek("LET"))
         {
-            Ast.Expression right = parseExpression();
-            if (!match(";"))
-                throw new ParseException("Missing ';'", tokens.get(0).getIndex());
+            return parseDeclarationStatement();
+        }
+        else if (peek("IF"))
+        {
+            return parseIfStatement();
+        }
+        else if (peek("FOR"))
+        {
+            return parseForStatement();
+        }
+        else if(peek("WHILE"))
+        {
+            return  parseWhileStatement();
+        }
+        else if(peek("RETURN"))
+        {
+            return parseReturnStatement();
+        }
+        else
+        {
+            Ast.Expression expr = parseExpression();
 
-            return new Ast.Statement.Assignment(expr, right);
+            // if there is an equal sign, it's an assignment
+            if (match("=")) {
+                Ast.Expression right = parseExpression();
+                if (!match(";"))
+                    throw new ParseException("Missing ';'", tokens.get(0).getIndex());
+
+                return new Ast.Statement.Assignment(expr, right);
+            }
+
+            // else it's an expression
+            if (!match(";"))
+                throw new ParseException("Missing ';'", tokens.get(-1).getIndex());
+
+            return new Ast.Statement.Expression(expr);
         }
 
-        // else it's an expression
-        if (!match(";"))
-            throw new ParseException("Missing ';'", tokens.get(-1).getIndex());
-
-        return new Ast.Statement.Expression(expr);
     }
 
     /**
@@ -88,7 +181,25 @@ public final class Parser {
      * statement, aka {@code LET}.
      */
     public Ast.Statement.Declaration parseDeclarationStatement() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        match("LET");
+
+        if(!match(Token.Type.IDENTIFIER))
+        {
+            throw new ParseException("Expected identifier", tokens.get(0).getIndex());
+        }
+
+        String name = tokens.get(-1).getLiteral();
+        Optional<Ast.Expression> value = Optional.empty();
+
+        if(match("="))
+        {
+            value = Optional.of(parseExpression());
+        }
+        if (!match(";"))
+            throw new ParseException("Missing ';'", tokens.get(0).getIndex());
+
+
+        return new Ast.Statement.Declaration(name, value);
     }
 
     /**
@@ -97,7 +208,29 @@ public final class Parser {
      * {@code IF}.
      */
     public Ast.Statement.If parseIfStatement() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        match("IF");
+        Ast.Expression condition = parseExpression();
+
+        List<Ast.Statement> doStatements = new ArrayList<Ast.Statement>();
+        if(match("DO"))
+        {
+            while(!peek("ELSE") && !peek("END"))
+                doStatements.add(parseStatement());
+        }
+        else
+            throw new ParseException("Expected \"DO\"", tokens.get(0).getIndex());
+
+        List<Ast.Statement> elseStatements = new ArrayList<Ast.Statement>();
+        if(match("ELSE"))
+        {
+            while(!peek("END"))
+                elseStatements.add(parseStatement());
+        }
+
+        if(!match("END"))
+            throw new ParseException("Missing END", tokens.get(0).getIndex());
+
+        return new Ast.Statement.If(condition, doStatements, elseStatements);
     }
 
     /**
@@ -106,7 +239,61 @@ public final class Parser {
      * {@code FOR}.
      */
     public Ast.Statement.For parseForStatement() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        match("FOR");
+
+        if(!match("("))
+            throw new ParseException("Missing '('", tokens.get(0).getIndex());
+
+        // get initialization
+        Ast.Statement.Assignment initialization = null;
+        if(peek(Token.Type.IDENTIFIER))
+        {
+            Ast.Expression reciever = parseExpression();
+            if(!match("="))
+                throw new ParseException("Missing '='", tokens.get(0).getIndex());
+            Ast.Expression value = parseExpression();
+            initialization = new Ast.Statement.Assignment(reciever, value);
+        }
+
+        // check for semicolon
+        if(!match(";"))
+            throw new ParseException("Missing ';'", tokens.get(0).getIndex());
+
+        // get condition
+        Ast.Expression condition = parseExpression();
+
+        if(!match(";"))
+            throw new ParseException("Missing ';'", tokens.get(0).getIndex());
+
+
+        // get increment
+        Ast.Statement increment = null;
+
+        if(peek(Token.Type.IDENTIFIER))
+        {
+            Ast.Expression reciever = parseExpression();
+            if(!match("="))
+                throw new ParseException("Missing '='", tokens.get(0).getIndex());
+            Ast.Expression value = parseExpression();
+            increment = new Ast.Statement.Assignment(reciever, value);
+        }
+
+
+        // check closing parenthesis
+        if(!match(")"))
+            throw new ParseException("Missing ')'", tokens.get(0).getIndex());
+
+        // get statement(s)
+        List<Ast.Statement> statements = new ArrayList<Ast.Statement>();
+        while (!peek("END") && tokens.has(0))
+        {
+            statements.add(parseStatement());
+        }
+
+        if(!match("END"))
+            throw new ParseException("Missing 'END'", tokens.get(-1).getIndex());
+
+        return new Ast.Statement.For(initialization, condition, increment, statements);
     }
 
     /**
@@ -115,7 +302,22 @@ public final class Parser {
      * {@code WHILE}.
      */
     public Ast.Statement.While parseWhileStatement() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        match("WHILE");
+        Ast.Expression condition = parseExpression();
+
+        if(!match("DO"))
+            throw new ParseException("Missing 'DO'", tokens.get(0).getIndex());
+
+        // get statement(s)
+        List<Ast.Statement> statements = new ArrayList<Ast.Statement>();
+        while (!peek("END") && tokens.has(0))
+        {
+            statements.add(parseStatement());
+        }
+
+        if(!match("END"))
+            throw new ParseException("Missing 'END'", tokens.get(-1).getIndex());
+        return new Ast.Statement.While(condition, statements);
     }
 
     /**
@@ -124,8 +326,13 @@ public final class Parser {
      * {@code RETURN}.
      */
     public Ast.Statement.Return parseReturnStatement() throws ParseException {
-       throw new UnsupportedOperationException(); //TODO
+       match("RETURN");
 
+       Ast.Expression expr = parseExpression();
+
+       if(!match(";"))
+           throw new ParseException("Missing ';'", tokens.get(0).getIndex());
+       return new Ast.Statement.Return(expr);
     }
 
     /**
@@ -279,7 +486,7 @@ public final class Parser {
                     if (match(")"))
                         expr = new Ast.Expression.Function(Optional.of(expr), label, args);
                     else
-                        throw new ParseException("Expected closing parenthesis", tokens.get(0).getIndex()); // TODO: maybe index -1?
+                        throw new ParseException("Expected closing parenthesis", tokens.get(0).getIndex());
                 }
             }
             else
@@ -485,7 +692,8 @@ public final class Parser {
     }
     // boolean used to check if the RHS can be the start of an expression
     // used for error throwing if RHS is missing
-    private boolean potentialStartExpression() {
+    private boolean potentialStartExpression()
+    {
         return peek("NIL") || peek("TRUE") || peek("FALSE")
                 || peek(Token.Type.INTEGER) || peek(Token.Type.DECIMAL)
                 || peek(Token.Type.CHARACTER) || peek(Token.Type.STRING)
