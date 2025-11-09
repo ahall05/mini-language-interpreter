@@ -67,6 +67,17 @@ public final class Parser {
         else
             throw new ParseException("Expected identifier", tokens.get(0).getIndex());
 
+        // check for semi colon
+        if(!match(":"))
+            throw new ParseException("Expected ':'", tokens.get(0).getIndex());
+
+        // check for type
+        String type;
+        if(match(Token.Type.IDENTIFIER))
+             type = checkHas().getLiteral();
+        else
+            throw new ParseException("Expected type", tokens.get(0).getIndex());
+
         Optional<Ast.Expression> expr = Optional.empty();
         if (match("=")) {
             expr = Optional.of(parseExpression());
@@ -75,7 +86,7 @@ public final class Parser {
         if(!match(";"))
             throw new ParseException("Missing ';'", tokens.get(0).getIndex());
 
-        return new Ast.Field(name, constant, expr);
+        return new Ast.Field(name, type, constant, expr);
     }
 
     /**
@@ -96,18 +107,41 @@ public final class Parser {
         if(!match("("))
             throw new ParseException("Expected '('", tokens.get(0).getIndex());
 
-        // get parameters
+        // get parameters and types
         List<String> parameters = new ArrayList<>();
+        List<String> paramTypes = new ArrayList<>();
+
         if(peek(Token.Type.IDENTIFIER))
         {
             do{
+                match(Token.Type.IDENTIFIER);
+
                 parameters.add(checkHas().getLiteral());
-            }while(peek(","));
+
+                if(match(":")) {
+                    if(match(Token.Type.IDENTIFIER))
+                        paramTypes.add(checkHas().getLiteral());
+                    else
+                        throw new ParseException("Expected Type", tokens.get(0).getIndex());
+                }
+                else
+                    throw new ParseException("Missing ':'", tokens.get(0).getIndex());
+
+            }while(match(","));
         }
 
         // check for )
         if(!match(")"))
             throw new ParseException("Expected ')'", tokens.get(0).getIndex());
+
+        // get return type
+        Optional<String> returnType = Optional.empty();
+        if(match(":")) {
+            if(match(Token.Type.IDENTIFIER))
+                returnType = Optional.of(checkHas().getLiteral());
+            else
+                throw new ParseException("Expected identifier return type", tokens.get(0).getIndex());
+        }
 
         if(!match("DO"))
             throw new ParseException("Expected 'DO'", tokens.get(0).getIndex());
@@ -123,7 +157,7 @@ public final class Parser {
         if(!match("END"))
             throw new ParseException("Missing 'END'", tokens.get(-1).getIndex());
 
-        return new Ast.Method(name, parameters, statements);
+        return new Ast.Method(name, parameters, paramTypes, returnType, statements);
     }
 
     /**
@@ -190,6 +224,18 @@ public final class Parser {
 
         String name = tokens.get(-1).getLiteral();
         Optional<Ast.Expression> value = Optional.empty();
+        Optional<String> type = Optional.empty();
+
+        // check for type
+        if(match(":")) {
+            // get literal if type is present
+            if (match(Token.Type.IDENTIFIER)){
+                type = Optional.of(tokens.get(-1).getLiteral());
+            }
+            else
+                throw new ParseException("Expected type identifier", tokens.get(0).getIndex());
+        }
+
 
         if(match("="))
         {
@@ -199,7 +245,7 @@ public final class Parser {
             throw new ParseException("Missing ';'", tokens.get(0).getIndex());
 
 
-        return new Ast.Statement.Declaration(name, value);
+        return new Ast.Statement.Declaration(name, type, value);
     }
 
     /**
